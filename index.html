@@ -1491,39 +1491,58 @@ async function checkSignature() {
     pollEndGameStatus();
 }
 
-// 💡 單機版：直接向後台索取名次與 PR 值，無需等待！
-// 💡 單機版：直接向後台索取名次與 PR 值，無需等待！
-async function pollEndGameStatus() {
-    try {
-        // 因為單機版沒有班級，只需要傳名字
-        const response = await fetch(API_URL, { ...fetchOptions, body: JSON.stringify({ action: 'checkEnd', studentName: myName }) });
-        const result = await response.json();
-        
-        document.getElementById('waiting-spinner').style.display = 'none'; 
-        document.getElementById('waiting-title').innerText = "結算完成！";
-        
-        if (result.myStatus === "成功") {
-            document.getElementById('waiting-text').innerHTML = `
-                <h1 style="color: #2ecc71; margin-bottom: 5px;">通關成功</h1>
-                <p style="font-size:18px; color: #5d4037; margin-top: 0;">通關時長：<span style="color:#d4af37; font-size:24px; font-weight:bold;">${result.myTime}</span></p>
-                <div style="background: rgba(212,175,55,0.1); padding: 15px; border-radius: 8px; border: 1px dashed #d4af37; margin: 20px 0;">
-                    <p style="font-size:18px; margin: 0;">目前全服破關人數：${result.totalPlayers} 人</p>
-                    <p style="font-size:20px; font-weight:bold; margin: 10px 0;">你是第 <span style="color:#e74c3c; font-size:32px;">${result.rank}</span> 名！</p>
-                    <p style="font-size:20px; font-weight:bold; margin: 0; color: #d4af37;">打敗了全服 <span style="font-size:36px;">${result.pr}%</span> 的玩家！</p>
-                </div>
-                <p style="color: #5d4037;">南街殷賑的風華因你而重現。</p>
-            `;
-        } else {
-            document.getElementById('waiting-text').innerHTML = `
-                <h1 style="color: #e74c3c;">落款錯誤</h1>
-                <p style="font-size:20px;">歷史的記憶模糊了...</p>
-                <p style="font-size:24px; font-weight:bold; margin-top:20px;">這幅畫真正的主人是：<span style="color:#d4af37;">${result.correctAnswer}</span></p>
-                <button class="action-btn" onclick="resetGame()" style="margin-top: 25px;">清除記憶，重新挑戰</button>
-            `;
-        }
-    } catch(e) { 
-        console.log("網路異常，3秒後重試..."); 
-        setTimeout(pollEndGameStatus, 3000); 
+
+function pollEndGameStatus() {
+    // 因為是單機，我們不需要 setInterval，直接執行結算邏輯
+    const waitingBox = document.getElementById('waiting-box');
+    document.getElementById('waiting-spinner').style.display = 'none';
+    document.getElementById('waiting-title').innerText = "結算完成！";
+
+    // 準備參考資料區塊
+    const referencesHTML = `
+        <div style="margin-top: 25px; text-align: left; background: rgba(234, 221, 197, 0.4); padding: 15px; border: 1px dashed #a08059; border-radius: 5px; font-size: 12px; color: #5d4037; max-height: 150px; overflow-y: auto; line-height: 1.6; font-family: 'Noto Serif TC', serif;">
+            <div style="font-weight: bold; border-bottom: 1px solid #c8b79b; padding-bottom: 5px; margin-bottom: 8px;">📚 參考資料</div>
+            <ol style="margin: 0; padding-left: 20px; word-break: break-all;">
+                <li>林柏亭，《臺灣美術全集．郭雪湖》。臺北：藝術家出版社，1992。</li>
+                <li>郭雪湖，〈後苑雞立〉（1920年），「北美館展覽資料庫：郭雪湖浸淫丹青七十年作品展」，臺北市立美術館，網址：https://archives.tfam.museum/exhibit/exhibitworks_detail.jsp?id=11873（瀏覽日期：2026年6月3日）。</li>
+                <li>蕭瓊瑞，〈「台灣美展80年」的史料彙整與研究展望〉，臺灣美術知識庫，國立臺灣美術館，網址：https://twfineartsarchive.ntmofa.gov.tw/TW/Search/Introduction.aspx（瀏覽日期：2026年6月3日）。</li>
+                <li>郭雪湖，〈松壑飛泉〉（1920年），「國家文化記憶庫：臺府展數位物件」，文化部，網址：https://tcmb.culture.tw/zh-tw/detail?indexCode=Taifuten_object&id=CA01_011_P006_040_e_t1（瀏覽日期：2026年6月3日）。</li>
+                <li>村上無羅（村上英夫），〈基隆燃放水燈圖〉， https://ntmofa-collections.ntmofa.gov.tw/GalData.aspx?RNO=MKMEMZMLMAMBMKMY&FROM=MN0F5K5M595L5MKLMT5J5R58（檢索日期：2026/6/1）</li>
+                <li>許伯瑜，〈【名單之後】村上無羅：古典之眼別開異地之色〉，「名單之後：臺灣近代美術檔案庫」，財團法人陳澄波文化基金會，網址：https://taifuten.com/story/（瀏覽日期：2026年6月3日）。</li>
+                <li>鹽月桃甫，〈山地姑娘〉（1927年），「名單之後：臺灣近代美術檔案庫」，財團法人陳澄波文化基金會，網址：https://taifuten.com/object/山地姑娘/（瀏覽日期：2026年6月3日）。</li>
+                <li>西岡塘翠，〈說苑／點綴島嶼臺灣的美術之秋，臺展素人短評〉，《臺灣時報》，1927-12-15，頁83-92（辨識、翻譯／李淑珠） https://taifuten.com/newspapers/%e8%aa%aa%e8%8b%91%ef%bc%8f%e9%bb%9e%e7%b6%b4%e5%b3%b6%e5%b6%bc%e8%87%ba%e7%81%a3%e7%9a%84%e7%be%8e%e8%a1%93%e4%b9%8b%e7%a7%8b%ef%bc%9d%ef%bc%9d%e8%87%ba%e5%b1%95%e7%b4%a0%e4%ba%ba%e7%9f%ad%e8%a9%95/</li>
+                <li>徐清蓮，〈春宵之圖〉，「名單之後：臺灣近代美術檔案庫」，財團法人陳澄波文化基金會，網址：https://taifuten.com/object/春宵之圖/（瀏覽日期：2026年6月3日）。</li>
+                <li>郭雪湖，〈圓山附近〉（1928年），「典藏品：郭雪湖《圓山附近》」，臺北市立美術館，網址：https://www.tfam.museum/collection/CollectionDetail.aspx?CID=3359&ddlLang=zh-tw（瀏覽日期：2026年6月3日）。</li>
+                <li>邱函妮，〈創造福爾摩沙藝術:近代臺灣美術中「地方色」與鄉土藝術的重層論述〉，《國立臺灣大學美術史研究集刊》37 期(2014 年 9 月)，頁 182-191。</li>
+                <li>郭雪湖，〈南街殷賑〉，北美館典藏， https://www.tfam.museum/Collection/CollectionList.aspx?sopen=1&menu=41&ddlLang=zh-tw（檢索日期：2026/6/1）</li>
+                <li>〈第三回臺展畫的審查結束 新鄉土藝術的創造如何〉，《臺灣日日新報》，1929-11-13（日刊2版）（辨識、翻譯／李淑珠） https://taifuten.com/newspapers/%e7%ac%ac%e4%b8%89%e5%9b%9e%e8%87%ba%e5%b1%95%e7%95%ab%e7%9a%84%e5%af%a9%e6%9f%a5%e7%b5%90%e6%9d%9f%e3%80%80%e6%96%b0%e9%84%89%e5%9c%9f%e8%97%9d%e8%a1%93%e7%9a%84%e5%89%b5%e9%80%a0%e5%a6%82%e4%bd%95/</li>
+                <li>林玉山，〈故園追憶〉（1935），臺北市立美術館，網址： https://www.tfam.museum/MultiMedia/Podcast.aspx?PodCastType=63&ddlLang=zh-tw （瀏覽日期：2026年6月3日）。</li>
+                <li>臺灣日日新報，《臺灣日日新報》，1907-02-23（日刊01版），漢珍知識網， https://elib.infolinker.com.tw/cgi-bin2/Libo.cgi?request=LA_METADATA.GET&template=results_single&user=leffmcnicfeogoaheolbpgemhbdbachigheemaofmhgdmaibplpefjdkjlifgpoi&client_type=search&lang=test&urlID=1780679988902&app=21&db=&expr=CIGEGBHEGFDNCHDBDJDADHCPDADCCPDCDDHODBDJDADHCPDADCCPDCDDCHCJCAGBGOGECACIGCGBGPGLGBGODNCHgfoffcakCHCJ&option=FLHDGPHCHEDNGEGBHEGFCOEJFN&start=0&number=20&result_type=complex&source=search_result&metadata_id=16803805&ot=0&</li>
+                <li>西岡塘翠，〈說苑／點綴島嶼臺灣的美術之秋，臺展素人短評〉，《臺灣時報》，1927年12月15日，頁83，日治時期臺灣時報Taiwan JIHO資料庫 : 1898-1945合集 https://elib.infolinker.com.tw/cgi-bin2/Libo.cgi?request=LA_METADATA.GET&template=results_single&user=leffmcnicfeogoaheolbpgemhbdbachigheemaofmhgdmaibplpefjdkjlifgpoi&client_type=search&lang=test&urlID=1780679988902&app=21&db=&expr=CIGEGBHEGFDNCHDBDJDADHCPDADCCPDCDDHODBDJDADHCPDADCCPDCDDCHCJCAGBGOGECACIGCGBGPGLGBGODNCHgfoffcakCHCJ&option=FLHDGPHCHEDNGEGBHEGFCOEJFN&start=0&number=20&result_type=complex&source=search_result&metadata_id=16803805&ot=0&</li>
+                <li>松林桂月，〈希望具備臺灣獨特的色彩（color） 遊戲之作入選無門〉，《臺灣日日新報》，1928年10月17日（日刊7版），漢珍知識網， https://elib.infolinker.com.tw/cgi-bin2/Libo.cgi?request=LA_METADATA.GET&template=results_single&user=leffmcnicfeogoaheolbpgemhbdbachigheemaofmhgdmaibplpefjdkjlifgpoi&client_type=search&lang=test&urlID=1780680882355&app=21&db=&expr=CICIGEGBHEGFDNCHDBDJDCDICPDBDACPDBDHHODBDJDCDICPDBDACPDBDHCHCJCAGBGOGECACIGCGBGPGLGBGODNCHgfoffcakCHCJCJCAGBGOGECACIHAGBGHGFFPGPHCGEGFHCDNCHDADHCHCJ&option=FLHDGPHCHEDNGEGBHEGFCOEJFN&start=0&number=20&result_type=complex&source=search_result&metadata_id=12756246&ot=0&</li>
+                <li>潘春源，〈牛車〉（1929年），臺北市立美術館， https://www.tfam.museum/Collection/CollectionDetail.aspx?ddlLang=zh-tw&CID=4094（瀏覽日期：2026年6月3日）。</li>
+                <li>〈第三回臺展畫的審查結束 新鄉土藝術的創造如何〉，《臺灣日日新報》，1929年11月13日（日刊2版），漢珍知識網， https://elib.infolinker.com.tw/cgi-bin2/Libo.cgirequest=LA_METADATA.GET&template=results_single&user=leffmcnicfeogoaheolbpgemhbdbachigheemaofmhgdmaibplpefjdkjlifgpoi&client_type=search&lang=test&urlID=1780680882355&app=21&db=&expr=CICIGEGBHEGFDNCHDBDJDCDICPDBDACPDBDHHODBDJDCDICPDBDACPDBDHCHCJCAGBGOGECACIGCGBGPGLGBGODNCHgfoffcakCHCJCJCAGBGOGECACIHAGBGHGFFPGPHCGEGFHCDNCHDADHCHCJ&option=FLHDGPHCHEDNGEGBHEGFCOEJFN&start=0&number=20&result_type=complex&source=search_result&metadata_id=12756246&ot=0&</li>
+            </ol>
+        </div>
+    `;
+
+    // 判斷遊戲結果
+    if (gameState.flags.finalUnlocked) { // 假設 finalUnlocked 代表遊戲已完成
+        document.getElementById('waiting-text').innerHTML = `
+            <h1 style="color: #2ecc71; margin-bottom: 5px;">挑戰成功</h1>
+            <p style="font-size:18px; color: #5d4037; margin-top: 0;">遊玩時長：<span style="color:#d4af37; font-size:24px; font-weight:bold;">${stopSpeedrunTimer()}</span></p>
+            <p style="font-size:20px; font-weight:bold; margin-top: 20px;">恭喜你，南街殷賑的歷史與畫作風華，已透過你的雙眼重新顯現。</p>
+            ${referencesHTML}
+            <button class="action-btn" onclick="resetGame()" style="margin-top: 25px;">返回首頁</button>
+        `;
+    } else {
+        document.getElementById('waiting-text').innerHTML = `
+            <h1 style="color: #e74c3c;">落款錯誤</h1>
+            <p style="font-size:20px;">歷史的記憶與畫作的主人似乎有些出入...</p>
+            <p style="font-size:24px; font-weight:bold; margin-top:20px;">正確答案應為：<span style="color:#d4af37;">郭雪湖</span></p>
+            ${referencesHTML}
+            <button class="action-btn" onclick="resetGame()" style="margin-top: 25px;">清除記憶，重新挑戰</button>
+        `;
     }
 }
 
