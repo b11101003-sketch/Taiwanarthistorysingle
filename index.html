@@ -194,8 +194,8 @@
     </style>
 </head>
 <body>
-    <audio id="bgm-audio" src="bgm.mp3"></audio>
-    <audio id="page-sfx" src="page.mp3"></audio>
+    <audio id="bgm-audio" src="bgm.mp3" preload="auto"></audio>
+    <audio id="page-sfx" src="page.mp3" preload="auto"></audio>
         
 <div id="login-screen">
     <div class="login-box">
@@ -341,11 +341,22 @@ window.addEventListener('load', async () => {
         document.getElementById('main-room').classList.add('active-scene');
         
         restoreUI();
-        
-        // 💡 核心修復：強制重啟計時器，不管它是不是遺失了
         startSpeedrunTimer();
-        
         setInterval(saveProgress, 3000);
+        
+        fetch(API_URL, { ...fetchOptions, body: JSON.stringify({ action: 'getClasses' }) });
+        
+        // 💡 關鍵修復：讀檔時因為跳過了開場畫面，必須等玩家第一次「點擊畫面」時喚醒音樂！
+        const wakeUpAudio = () => {
+            const bgm = document.getElementById('bgm-audio');
+            if (bgm && bgm.paused && !isMuted) {
+                bgm.volume = BGM_VOLUME;
+                bgm.play().catch(e => {});
+            }
+            document.removeEventListener('pointerdown', wakeUpAudio); // 喚醒後就解除監聽
+        };
+        document.addEventListener('pointerdown', wakeUpAudio);
+
         return; 
     }
 });
@@ -373,7 +384,7 @@ async function studentJoinGame() {
 }
 
 const BGM_VOLUME = 0.1; 
-const SFX_VOLUME = 0.8; 
+const SFX_VOLUME = 1; 
 let isMuted = false;
 
 function toggleAudio() {
@@ -381,7 +392,15 @@ function toggleAudio() {
     const bgm = document.getElementById('bgm-audio');
     const sfx = document.getElementById('page-sfx');
     const btn = document.getElementById('audio-toggle');
-    if (bgm) bgm.muted = isMuted;
+    
+    if (bgm) {
+        bgm.muted = isMuted;
+        // 💡 關鍵修復：如果解除靜音時音樂是暫停的，就幫它「按開始」
+        if (!isMuted && bgm.paused) {
+            bgm.volume = BGM_VOLUME;
+            bgm.play().catch(e => console.log("等待互動才能播放音樂"));
+        }
+    }
     if (sfx) sfx.muted = isMuted;
     btn.innerText = isMuted ? '🔇' : '🔊';
 }
@@ -390,7 +409,7 @@ function playPageSound() {
     const sfx = document.getElementById('page-sfx');
     if (sfx) {
         sfx.volume = SFX_VOLUME; 
-        sfx.currentTime = 1; 
+        sfx.currentTime = 0; 
         sfx.play().catch(e => console.log("音效播放被瀏覽器阻擋:", e));
     }
 }
@@ -489,9 +508,36 @@ function startGame() {
     const bgm = document.getElementById('bgm-audio');
     if (bgm) {
         bgm.volume = BGM_VOLUME; 
-        bgm.currentTime = 15; 
-        bgm.play().catch(e => console.log("BGM 播放被瀏覽器阻擋:", e));
-        bgm.addEventListener('ended', function() { this.currentTime = 15; this.play(); });
+        // 💡 關鍵修復：先讓音樂播出來，再設定跳到 15 秒，避免載入時間差導致崩潰
+        bgm.play().then(() => {
+            if (bgm.currentTime < 15) bgm.currentTime = 15;
+        }).catch(e => console.log("BGM 播放被瀏覽器阻擋:", e));
+        
+        bgm.onended = function() { this.currentTime = 15; this.play(); };
+    }
+
+    const startScreen = document.getElementById('start-screen');
+    startScreen.style.opacity = '0'; 
+    
+   setTimeout(() => {
+        startScreen.style.display = 'none'; 
+        document.getElementById('audio-toggle').style.display = 'block'; 
+        document.getElementById('reset-btn').style.display = 'block'; 
+
+        document.getElementById('main-room').classList.add('active-scene');
+        setTimeout(() => document.getElementById('item1').classList.add('flashing'), 2000); 
+        setInterval(saveProgress, 3000);
+    }, 1500);
+}function startGame() {
+    const bgm = document.getElementById('bgm-audio');
+    if (bgm) {
+        bgm.volume = BGM_VOLUME; 
+        // 💡 關鍵修復：先讓音樂播出來，再設定跳到 15 秒，避免載入時間差導致崩潰
+        bgm.play().then(() => {
+            if (bgm.currentTime < 15) bgm.currentTime = 15;
+        }).catch(e => console.log("BGM 播放被瀏覽器阻擋:", e));
+        
+        bgm.onended = function() { this.currentTime = 15; this.play(); };
     }
 
     const startScreen = document.getElementById('start-screen');
